@@ -1,7 +1,6 @@
 #ifndef __LCD_H
 #define __LCD_H
 
-#include "i2c.h"
 #include "stm32f10x.h"
 
 #define LCD_BASE_ADDRESS 0x4E
@@ -68,6 +67,10 @@ uint8_t send_in_4bit_mode(uint8_t value, uint8_t mode);
 uint8_t lcd_move_cursor(uint8_t row, uint8_t column);
 
 uint8_t lcd_write_string(const char * string, int len);
+
+uint8_t lcd_blink_on();
+
+uint8_t lcd_blink_off();
 
 void lcd_clear();
 

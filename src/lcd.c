@@ -1,3 +1,4 @@
+#include "i2c.h"
 #include "lcd.h"
 #include "timer.h"
 
@@ -42,6 +43,19 @@ uint8_t send_half_byte(uint8_t value) {
 	delay_us(1);
 	i2c_send_byte(LCD_BASE_ADDRESS, value & ~LCD_ENABLE_BIT);
 	delay_us(40);
+}
+
+uint8_t lcd_blink_on()
+{
+	lcd_instruction(
+			LCD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_DISPLAY_CURSOR_ON
+					| LCD_DISPLAY_BLINK_ON);
+}
+
+uint8_t lcd_blink_off()
+{
+	lcd_instruction(
+			LCD_DISPLAY_CONTROL | LCD_DISPLAY_ON);
 }
 
 void lcd_backlight_on()
