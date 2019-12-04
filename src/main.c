@@ -19,95 +19,165 @@
 #include "spi_driver.h"
 #include "ds18b20.h"
 
-#define TRANSMITTER 0
+#define TEMP_SENTINEL_VALUE 0xff
+#define HISTERESIS 3
 
+#define MAX_FAILURES 5
+
+#define TRANSMITTER 1
+
+
+uint8_t old_temp = TEMP_SENTINEL_VALUE;
 int16_t desired_temp;
 uint8_t desired_buffer[2] = {0,0};
 uint8_t actual_buffer[2] = {0,0};
 uint8_t buffer[3];
 
-void parse_temp(uint8_t resolution);
+uint8_t received_desired_temp = TEMP_SENTINEL_VALUE;
+uint8_t histeresis_enabled = 0;
+uint8_t relay_status = 0;
+
+uint8_t failure_counter = 0;
+
+GPIO_TypeDef * relay_port = GPIOB;
+uint16_t relay_pin = GPIO_Pin_7;
+
+uint8_t parse_temp(uint8_t lsb, uint8_t msb);
+void set_histeresis_and_relay_status(uint8_t temp);
 
 void loop_transmitter()
 {
-	flush_tx();
-	flush_rx();
-	clear_int_flags();
-	read_from_register_multiple_bytes(TX_ADDRESS_REGISTER, buffer,3);
-	read_from_register_multiple_bytes(RX_ADDRESS_P0_REGISTER, buffer,3);
 	while(1)
 	{
-		volatile uint8_t status;
-		volatile uint8_t fifo_status;
-		status = force_read_status();
-//		desired_temp = parse_desired_temp();
-		desired_temp = 84;
-		desired_buffer[0] = (desired_temp & 0xff);
-		desired_buffer[1] = (desired_temp >> 8) & 0xff;
-		send(desired_buffer, 2);
-		delay_ms(1000);
-		status = force_read_status();
-		if(is_data_sent())
+		desired_buffer[0] = parse_desired_temp();
+		if(!is_temp_valid())
 		{
-			read_received(actual_buffer, 2);
-			set_current_temp(255);
+			desired_buffer[0] = TEMP_SENTINEL_VALUE;
+		}
+
+		send(desired_buffer, 1);
+		delay_ms(1000);
+		force_read_status();
+		if(is_data_sent() && has_received_data())
+		{
+			read_received(actual_buffer, 1);
+			failure_counter = 0;
+		}
+		else
+		{
+			failure_counter++;
+			if(++failure_counter > MAX_FAILURES)
+			{
+				actual_buffer[0] = TEMP_SENTINEL_VALUE;
+			}
 		}
 		flush_tx();
 		flush_rx();
 		clear_int_flags();
-		fifo_status = read_fifo_status();
+		set_current_temp(actual_buffer[0]);
 	}
 }
 
 void loop_receiver()
 {
-//	actual_buffer[0] = 0x42;
-//	actual_buffer[1] = 0x42;
-//	flush_tx();
-//	flush_rx();
-//	clear_int_flags();
-//	read_from_register_multiple_bytes(TX_ADDRESS_REGISTER, buffer,3);
-//	read_from_register_multiple_bytes(RX_ADDRESS_P0_REGISTER, buffer,3);
-//	while(1)
-//	{
-//		write_ack_payload(actual_buffer,2);
-//		volatile uint8_t status;
-//		volatile uint8_t fifo_status;
-//		chip_enable_up();
-//		delay_ms(100);
-//		chip_enable_down();
-//		read_received(desired_buffer, 2);
-//		status = force_read_status();
-//		fifo_status = read_fifo_status();
-//		flush_rx();
-//		clear_int_flags();
-//	}
+	actual_buffer[0] = TEMP_SENTINEL_VALUE;
+	desired_buffer[0] = TEMP_SENTINEL_VALUE;
 
-	uint8_t conversion_resolution = CONVERSION_RESOLUTION_9_BIT;
+	uint8_t * ds18b20_buffer;
+	uint8_t temp_lsb;
+	uint8_t temp_msb;
 	one_wire_set_pin(GPIOB, GPIO_Pin_9);
-
-	while(ds18b20_configure(ALARM_LOW, ALARM_HIGH, conversion_resolution) != 0)
+	while(ds18b20_configure(ALARM_LOW, ALARM_HIGH, CONVERSION_RESOLUTION_9_BIT) != 0)
 	{
 		delay_ms(10);
 	}
 
-	uint8_t * ds18b20_buffer;
-	volatile uint8_t temp_lsb;
-	volatile uint8_t temp_msb;
 	while(1)
 	{
+		write_ack_payload(actual_buffer,1);
+		chip_enable_up();
+		delay_ms(1000);
+		chip_enable_down();
+		force_read_status();
+		if(has_received_data())
+		{
+			read_received(desired_buffer, 1);
+			received_desired_temp = desired_buffer[0];
+			if(received_desired_temp != old_temp)
+			{
+				histeresis_enabled = 0;
+				old_temp = received_desired_temp;
+			}
+			failure_counter = 0;
+		}
+		else
+		{
+			if(++failure_counter >= MAX_FAILURES)
+			{
+				received_desired_temp = TEMP_SENTINEL_VALUE;
+			}
+		}
+		flush_rx();
+		flush_tx();
+		clear_int_flags();
+
 		ds18b20_convert_temp();
 		ds18b20_read_temp_into_buffer();
 		ds18b20_buffer = ds18b20_get_buffer();
 		temp_lsb = ds18b20_buffer[TEMP_LSB_INDEX];
 		temp_msb = ds18b20_buffer[TEMP_MSB_INDEX];
-		parse_temp(conversion_resolution);
+		actual_buffer[0] = parse_temp(temp_lsb,temp_msb);
+		set_histeresis_and_relay_status(actual_buffer[0]);
+
+		GPIO_WriteBit(relay_port, relay_pin, relay_status);
+ }
+}
+
+void set_histeresis_and_relay_status(uint8_t temp)
+{
+	if(received_desired_temp == TEMP_SENTINEL_VALUE)
+	{
+		return;
+	}
+
+	if(temp < received_desired_temp)
+	{
+		if(histeresis_enabled)
+		{
+			if(temp < (received_desired_temp - HISTERESIS))
+			{
+				relay_status = 1;
+				histeresis_enabled = 0;
+			}
+			else
+			{
+				relay_status = 0;
+				histeresis_enabled = 1;
+			}
+		}
+		else
+		{
+			relay_status = 1;
+			histeresis_enabled = 0;
+		}
+	}
+	else
+	{
+		relay_status = 0;
+		histeresis_enabled = 1;
 	}
 }
 
-void parse_temp(uint8_t resolution)
+uint8_t parse_temp(uint8_t lsb, uint8_t msb)
 {
+	if ((msb & (0xf0)) > 0)
+	{
+		//Minus values are not used in this application, indicate error
+		return TEMP_SENTINEL_VALUE;
+	}
+	uint16_t rounding_reminder = lsb & ~(0x08);
 
+	return (lsb >> 4) | ((msb & 0x07) << 4);
 }
 
 

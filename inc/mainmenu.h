@@ -1,6 +1,8 @@
 #ifndef __MAINMENU_H__
 #define __MAINMENU_H_
 
+#define ASCII_ZERO 0x30
+
 #include "stm32f10x.h"
 
 typedef void (*handler_type)(uint8_t);
@@ -20,8 +22,8 @@ typedef void (*handler_type)(uint8_t);
 void menu_init();
 void menu_reset_second_row();
 
-int16_t parse_desired_temp();
-void set_current_temp(uint16_t temp);
+uint8_t parse_desired_temp();
+void set_current_temp(uint8_t temp);
 void menu_write_temperature();
 void menu_switch_state(uint8_t state);
 void menu_handle_button_pressed(uint8_t button);
@@ -29,5 +31,6 @@ void _handle_button_display(uint8_t button);
 void _handle_button_edit(uint8_t button);
 
 void menu_switch_handler(handler_type new_func);
+uint8_t is_temp_valid();
 
 #endif

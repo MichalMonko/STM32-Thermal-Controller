@@ -2,21 +2,63 @@
 #include "lcd.h"
 
 handler_type handler;
+uint8_t current_state = DISPLAY_STATE;
 
 uint8_t current_character = 0;
 uint8_t desired_temp_str[3] = {'-', '-', '-'} ;
 uint8_t current_temp_str[3] =  {'-', '-', '-'};
 uint16_t current_temperature = 0;
 
+uint8_t temp_valid = 0;
+
+uint8_t ASCII_DIGITS[10] = {0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39};
+uint8_t DIGITS_MULTIPLIERS[4] = {0,1,10,100};
 
 
-void set_current_temp(uint16_t temp)
+void set_current_temp(uint8_t temp)
 {
-	uint8_t temp_lower = temp | 0xff;
-	uint8_t temp_upper = (temp >>8) | 0xff;
-	current_temp_str[0] = 'A';
-	menu_switch_state(DISPLAY_STATE);
-	//TODO: PARSE 16 bits into temperature string
+	uint8_t original_temp = temp;
+
+	current_temp_str[0] = '-';
+	current_temp_str[1] = '-';
+	current_temp_str[2] = '-';
+
+	if(temp == 0xff)
+	{
+		current_temp_str[0] = 'E';
+		current_temp_str[1] = 'R';
+		current_temp_str[2] = 'R';
+	}
+	else
+	{
+		current_temp_str[0] = (temp -(temp % 100)) / 100;
+		temp = temp - current_temp_str[0] * 100;
+		current_temp_str[1] = (temp -(temp % 10)) / 10;
+		temp = temp - current_temp_str[1] * 10;
+		current_temp_str[2] = temp;
+
+		if(original_temp >= 100)
+		{
+			current_temp_str[0] = ASCII_DIGITS[current_temp_str[0]];
+			current_temp_str[1] = ASCII_DIGITS[current_temp_str[1]];
+			current_temp_str[2] = ASCII_DIGITS[current_temp_str[2]];
+		}
+		else if(original_temp >= 10)
+		{
+			current_temp_str[0] = ASCII_SPACE;
+			current_temp_str[1] = ASCII_DIGITS[current_temp_str[1]];
+			current_temp_str[2] = ASCII_DIGITS[current_temp_str[2]];
+		}
+		else
+		{
+			current_temp_str[0] = ASCII_SPACE;
+			current_temp_str[1] = ASCII_SPACE;
+			current_temp_str[2] = ASCII_DIGITS[current_temp_str[2]];
+		}
+	}
+
+	if(current_state != EDITION_STATE)
+		menu_switch_state(DISPLAY_STATE);
 }
 
 void _handle_button_display(uint8_t button)
@@ -79,21 +121,24 @@ void _handle_button_edit(uint8_t button)
 
 void menu_switch_state(uint8_t state)
 {
+	current_state = state;
 	menu_reset_second_row();
 	if(state == DISPLAY_STATE)
 	{
+
+
 		lcd_blink_off();
 		menu_switch_handler(_handle_button_display);
 		menu_write_temperature();
 
-	for(int i =0; i < MAX_TEMP_CHARS; i++)
-	{
-		desired_temp_str[i] = ASCII_NULL;
-	}
-
 	}
 	else if(state == EDITION_STATE)
 	{
+		for(int i =0; i < MAX_TEMP_CHARS; i++)
+		{
+			desired_temp_str[i] = ASCII_NULL;
+		}
+
 		lcd_move_cursor(1,0);
 		menu_write_temperature(desired_temp_str);
 		current_character = 0;
@@ -147,17 +192,33 @@ void menu_switch_handler(handler_type new_func)
 	handler = new_func;
 }
 
-int16_t parse_desired_temp()
+uint8_t parse_desired_temp()
 {
-	uint8_t ascii_zero = 0x30;
-	int16_t returned_temp = -1;
-	for(int i =2,multiplier=1; i >= 0; i--,multiplier*=10)
+	temp_valid = 0;
+	uint16_t returned_temp = 0;
+
+	uint8_t blank_counter = 0;
+	for(int i =0; i < MAX_TEMP_CHARS; i++)
 	{
-		uint8_t temp_char = desired_temp_str[i];
-		if((temp_char > 30) && (temp_char < 58))
-		returned_temp += multiplier * temp_char;
-		else
-			break;
+		if((desired_temp_str[i] < ASCII_ZERO) || (desired_temp_str[i] > (ASCII_ZERO + 9)))
+		{
+			blank_counter++;
+		}
 	}
-	return returned_temp;
+	uint8_t number_of_digits = MAX_TEMP_CHARS - blank_counter;
+
+	for(uint8_t i =0, multiplier=DIGITS_MULTIPLIERS[number_of_digits];
+			multiplier > 0; multiplier /= 10, i++
+			)
+	{
+		returned_temp += (desired_temp_str[i] - ASCII_ZERO) * multiplier;
+		temp_valid = 1;
+	}
+
+	return (uint8_t) returned_temp;
+}
+
+uint8_t is_temp_valid()
+{
+	return temp_valid;
 }

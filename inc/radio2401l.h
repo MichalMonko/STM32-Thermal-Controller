@@ -87,7 +87,7 @@ typedef unsigned char uint8_t;
 #define DYNPD_REGISTER 0x1c
 #define DYNPD_PIPE_0 0x01
 
-#define PAYLOAD_WIDTH 0x02
+#define PAYLOAD_WIDTH 0x01
 
 void configure_chip_enable(GPIO_TypeDef * port, uint16_t pin);
 

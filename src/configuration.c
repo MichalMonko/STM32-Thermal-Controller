@@ -267,6 +267,7 @@ void configure_for_receiver(void)
 	configure_spi();
 	configure_gpio();
 
+	// One wire pin
 	GPIO_InitTypeDef gpio;
 	GPIO_StructInit(&gpio);
 	gpio.GPIO_Pin = GPIO_Pin_9;
@@ -274,6 +275,14 @@ void configure_for_receiver(void)
 	gpio.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIO_Init(GPIOB, &gpio);
 	GPIO_WriteBit(GPIOB, GPIO_Pin_9, ENABLE);
+
+	// Relay MOSFET switch
+	GPIO_StructInit(&gpio);
+	gpio.GPIO_Pin = GPIO_Pin_7;
+	gpio.GPIO_Mode = GPIO_Mode_Out_OD;
+	gpio.GPIO_Speed = GPIO_Speed_2MHz;
+	GPIO_Init(GPIOB, &gpio);
+	GPIO_WriteBit(GPIOB, GPIO_Pin_7, RESET);
 }
 
 

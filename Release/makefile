@@ -32,10 +32,10 @@ endif
 all: bluepillsample.elf
 
 # Tool invocations
-bluepillsample.elf: $(OBJS) $(USER_OBJS) /home/warchlak/stm32workspace/bluepillsample/LinkerScript.ld
+bluepillsample.elf: $(OBJS) $(USER_OBJS) /home/monko/git/driver/LinkerScript.ld
 	@echo 'Building target: $@'
 	@echo 'Invoking: MCU GCC Linker'
-	arm-none-eabi-gcc -mcpu=cortex-m3 -mthumb -mfloat-abi=soft -T"/home/warchlak/stm32workspace/bluepillsample/LinkerScript.ld" -Wl,-Map=output.map -Wl,--gc-sections -o "bluepillsample.elf" @"objects.list" $(USER_OBJS) $(LIBS) -lm
+	arm-none-eabi-gcc -mcpu=cortex-m3 -mthumb -mfloat-abi=soft -T"/home/monko/git/driver/LinkerScript.ld" -Wl,-Map=output.map -Wl,--gc-sections -o "bluepillsample.elf" @"objects.list" $(USER_OBJS) $(LIBS) -lm
 	@echo 'Finished building target: $@'
 	@echo ' '
 	$(MAKE) --no-print-directory post-build
